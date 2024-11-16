@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Drawing App</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .toolbar {
+            position: fixed;
+            top: 0;
+            background-color: #f0f0f0;
+            width: 100%;
+            padding: 10px;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        canvas {
+            border: 1px solid black;
+            cursor: crosshair;
+            margin-top: 60px;
+        }
+        .selected {
+            background-color: #007bff;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <label for="toleranceSlider">라인 단순화 정도: <span id="toleranceValue">10</span></label>
+        <input type="range" id="toleranceSlider" min="1" max="30" value="10">
+        <button id="noSmoothingButton">일반</button>
+        <button id="rdpButton">라인 단순화</button>
+    </div>
+    <canvas id="drawingCanvas" width="800" height="600"></canvas>
+    <script>
+        window.onload = function() {
+            setAlgorithm('rdp', rdpButton);
+        }
+
+        // 슬라이더 요소 가져오기
+        const toleranceSlider = document.getElementById('toleranceSlider');
+        const toleranceValueLabel = document.getElementById('toleranceValue');
+
+        // 슬라이더 값이 변경될 때 이벤트 핸들러 추가
+        toleranceSlider.addEventListener('input', function() {
+            // 라벨 값을 슬라이더의 현재 값으로 변경
+            toleranceValueLabel.innerText = this.value;
+        });
+
+
+        const canvas = document.getElementById('drawingCanvas');
+        const ctx = canvas.getContext('2d');
+        const noSmoothingButton = document.getElementById('noSmoothingButton');
+        const rdpButton = document.getElementById('rdpButton');
+
+        let drawing = false;
+        let points = [];
+        let currentAlgorithm = null;
+        let allPaths = [];
+
+        // Set current algorithm based on button click
+        noSmoothingButton.addEventListener('click', () => setAlgorithm(null, noSmoothingButton));
+        rdpButton.addEventListener('click', () => setAlgorithm('rdp', rdpButton));
+
+        function setAlgorithm(algorithm, button) {
+            currentAlgorithm = algorithm;
+            document.querySelectorAll('.toolbar button').forEach(btn => btn.classList.remove('selected'));
+            button.classList.add('selected');
+        }
+
+        // Drawing event listeners
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseleave', stopDrawing);
+
+        function startDrawing(event) {
+            drawing = true;
+            points = [];
+            ctx.beginPath();
+            ctx.moveTo(event.offsetX, event.offsetY);
+            points.push({ x: event.offsetX, y: event.offsetY });
+        }
+
+        function draw(event) {
+            if (!drawing) return;
+            points.push({ x: event.offsetX, y: event.offsetY });
+            ctx.lineTo(event.offsetX, event.offsetY);
+            ctx.stroke();
+        }
+
+        function stopDrawing() {
+            if (!drawing) return;
+            drawing = false;
+            applySmoothingAlgorithm();
+        }
+
+        // Apply selected smoothing algorithm
+        function applySmoothingAlgorithm() {
+            if (currentAlgorithm === 'rdp') {
+                applyRamerDouglasPeucker();
+            } else {
+                allPaths.push(points);
+                redrawAllPaths();
+            }
+        }
+
+        // Ramer-Douglas-Peucker Algorithm
+        function applyRamerDouglasPeucker() {
+            if (points.length < 3) return;
+            const tolerance = parseInt(document.getElementById('toleranceSlider').value);
+            const simplifiedPoints = rdp(points, tolerance);
+            allPaths.push(simplifiedPoints);
+            redrawAllPaths();
+        }
+
+        function rdp(points, epsilon) {
+            if (points.length < 3) return points;
+
+            let dmax = 0;
+            let index = 0;
+            const end = points.length - 1;
+
+            for (let i = 1; i < end; i++) {
+                const d = perpendicularDistance(points[i], points[0], points[end]);
+                if (d > dmax) {
+                    index = i;
+                    dmax = d;
+                }
+            }
+
+            if (dmax > epsilon) {
+                const recResults1 = rdp(points.slice(0, index + 1), epsilon);
+                const recResults2 = rdp(points.slice(index), epsilon);
+                return recResults1.slice(0, recResults1.length - 1).concat(recResults2);
+            } else {
+                return [points[0], points[end]];
+            }
+        }
+
+        function perpendicularDistance(point, lineStart, lineEnd) {
+            const num = Math.abs((lineEnd.y - lineStart.y) * point.x - (lineEnd.x - lineStart.x) * point.y + lineEnd.x * lineStart.y - lineEnd.y * lineStart.x);
+            const den = Math.sqrt((lineEnd.y - lineStart.y) ** 2 + (lineEnd.x - lineStart.x) ** 2);
+            return num / den;
+        }
+
+        // Redraw all paths on the canvas
+        function redrawAllPaths() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            allPaths.forEach(path => {
+                ctx.beginPath();
+                ctx.moveTo(path[0].x, path[0].y);
+                path.forEach(point => ctx.lineTo(point.x, point.y));
+                ctx.stroke();
+            });
+        }
+    </script>
+</body>
+</html>
+
